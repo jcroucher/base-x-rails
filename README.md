@@ -25,6 +25,10 @@ Base-X generates a complete Rails 8.1 application with:
 | **Frontend** | Tailwind CSS 4.0, Hotwire (Turbo + Stimulus), ViewComponents |
 | **API** | Bearer token auth, versioned namespace (`Api::V1`) |
 | **Impersonation** | Admin user-switching via [Pretender](https://github.com/ankane/pretender) |
+| **Soft deletes** | [Discard](https://github.com/jmondo/discard) on critical models (Users, Teams, Memberships, Invitations, ApiTokens) |
+| **Dev email** | [letter_opener_web](https://github.com/fgrehm/letter_opener_web) captures emails in browser at `/letter_opener` |
+| **Job dashboard** | [Mission Control Jobs](https://github.com/rails/mission_control-jobs) web UI at `/admin/jobs` |
+| **Setup wizard** | First-run `/setup` flow creates the initial admin account without seeds or console |
 
 ## Installation
 
@@ -166,7 +170,7 @@ lib/
 
 ## Build Phases
 
-The skill generates the app in four phases, each building on the last:
+The skill generates the app in five phases, each building on the last:
 
 ### Phase 1 — Project Setup & Core Models
 
@@ -200,6 +204,15 @@ The skill generates the app in four phases, each building on the last:
 - Wires up Stimulus controllers (dropdown, modal, clipboard, dismissible, auto-submit)
 - Generates the project README
 
+### Phase 5 — Developer Experience & App Setup
+
+- Adds `letter_opener_web` to capture development emails in the browser
+- Fixes seeds to set `confirmed_at` so the admin user can log in immediately
+- Builds a first-run setup wizard at `/setup` that creates the initial admin account
+- Adds soft deletes via `discard` on Users, Teams, Memberships, Invitations, and ApiTokens
+- Installs Mission Control Jobs dashboard at `/admin/jobs` for Solid Queue monitoring
+- Configures development email delivery via letter_opener_web
+
 ## Post-Generation Setup
 
 After the skill finishes, you'll need to:
@@ -210,11 +223,25 @@ After the skill finishes, you'll need to:
 4. **Start the server** — `bin/dev`
 5. **Visit** `http://localhost:3000`
 
+### First-Run Setup
+
+On a fresh install (no seeds), visit `http://localhost:3000` — you'll be redirected to `/setup` to create your admin account. This bypasses Devise's email confirmation requirement.
+
+Alternatively, run `rails db:seed` to create the default admin user.
+
 ### Default Development Login
 
 After running seeds:
 - **Email:** `admin@example.com`
 - **Password:** `password123`
+
+### Development Routes
+
+| Route | Purpose |
+|-------|---------|
+| `/setup` | First-run admin setup wizard (disabled after first admin exists) |
+| `/letter_opener` | Email preview UI (development only) |
+| `/admin/jobs` | Solid Queue job dashboard (admin only) |
 
 ## Environment Variables
 
@@ -280,6 +307,19 @@ current_team.on_trial?     # Currently in trial?
 current_team.plan          # Current Plan record
 ```
 
+### Soft delete and restore records
+
+Critical models (User, Team, Membership, Invitation, ApiToken) use soft deletes via Discard:
+
+```ruby
+user.soft_delete!           # Sets discarded_at, hides from default queries
+user.restore!               # Clears discarded_at, makes visible again
+
+User.all                    # Only kept (non-deleted) records
+User.discarded              # Only soft-deleted records
+User.with_discarded         # All records including soft-deleted
+```
+
 ## Customization
 
 ### Changing the Tenancy Mode
@@ -322,6 +362,7 @@ Contributions are welcome! If you'd like to improve the skill:
 | `phase2-auth-billing.md` | Phase 2 reference: authentication, billing, authorization |
 | `phase3-features.md` | Phase 3 reference: notifications, admin panel, API |
 | `phase4-ui.md` | Phase 4 reference: UI, Stimulus controllers, layouts |
+| `phase5-dev-setup.md` | Phase 5 reference: dev email, setup wizard, soft deletes, job dashboard |
 
 ## License
 

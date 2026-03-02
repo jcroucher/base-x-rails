@@ -69,6 +69,17 @@ Work through these phases in order. Read each reference file before starting tha
 5. Set up Turbo Streams for real-time updates
 6. Generate a comprehensive `README.md` covering setup, architecture, and usage
 
+### Phase 5: Developer Experience & App Setup
+**Read:** `references/phase5-dev-setup.md`
+
+1. Add `letter_opener_web`, `mission_control-jobs`, and `discard` gems
+2. Configure development email delivery via letter_opener_web
+3. Fix seeds to set `confirmed_at` on the admin user
+4. Build first-run setup wizard (`/setup`) with `SetupGuard` concern
+5. Add soft deletes (Discard) to Users, Teams, Memberships, Invitations, ApiTokens
+6. Configure Mission Control Jobs dashboard at `/admin/jobs`
+7. Add routes for setup wizard, letter_opener (dev), and jobs dashboard
+
 ## Key Decisions to Confirm with the User
 
 Before generating, ask the user:
@@ -124,13 +135,19 @@ app-name/
 │   ├── controllers/
 │   │   ├── application_controller.rb      # Tenant-aware base
 │   │   ├── dashboard_controller.rb
+│   │   ├── setup_controller.rb            # First-run setup wizard
 │   │   ├── teams_controller.rb
 │   │   ├── memberships_controller.rb
 │   │   ├── invitations_controller.rb
 │   │   ├── billings_controller.rb
+│   │   ├── concerns/
+│   │   │   ├── setup_guard.rb             # Redirects to /setup when no admin
+│   │   │   └── ...
 │   │   └── api/
 │   │       └── base_controller.rb         # API token auth
 │   ├── models/
+│   │   ├── concerns/
+│   │   │   └── soft_deletable.rb          # Discard wrapper
 │   │   ├── user.rb
 │   │   ├── team.rb
 │   │   ├── membership.rb
@@ -152,6 +169,7 @@ app-name/
 ├── config/
 │   ├── initializers/
 │   │   ├── base_x.rb                       # App configuration
+│   │   ├── mission_control.rb              # Jobs dashboard config
 │   │   └── pay.rb                          # Billing config
 │   └── routes.rb
 ├── db/
