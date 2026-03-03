@@ -29,6 +29,12 @@ Base-X generates a complete Rails 8.1 application with:
 | **Dev email** | [letter_opener_web](https://github.com/fgrehm/letter_opener_web) captures emails in browser at `/letter_opener` |
 | **Job dashboard** | [Mission Control Jobs](https://github.com/rails/mission_control-jobs) web UI at `/admin/jobs` |
 | **Setup wizard** | First-run `/setup` flow creates the initial admin account without seeds or console |
+| **User settings** | Tabbed settings page with profile, password, connected accounts, terms gate, account deletion |
+| **Rate limiting** | [Rack::Attack](https://github.com/rack/rack-attack) throttles on login, API, password reset, and invitations |
+| **CORS** | [Rack::Cors](https://github.com/cyu/rack-cors) configured for API endpoints |
+| **Pagination** | [Pagy](https://github.com/ddnexus/pagy) with Tailwind styling and API headers |
+| **Test suite** | Minitest with fixtures, model tests, controller tests, and system tests |
+| **CI** | [GitHub Actions](https://github.com/features/actions) workflow with PostgreSQL, test suite, and RuboCop |
 
 ## Installation
 
@@ -116,6 +122,7 @@ User ──has_many──▶ Membership ◀──has_many── Team
 | `Plan` | Subscription tiers with feature flags |
 | `ApiToken` | Bearer tokens for API access |
 | `Announcement` | System-wide broadcasts from admins |
+| `ConnectedAccount` | OAuth provider links (Google, GitHub, etc.) |
 
 ### Project Structure
 
@@ -123,18 +130,26 @@ User ──has_many──▶ Membership ◀──has_many── Team
 app/
 ├── controllers/
 │   ├── concerns/
-│   │   ├── set_current_team.rb      # Tenant resolution
-│   │   └── authorization.rb         # Membership helpers
+│   │   ├── set_current_team.rb          # Tenant resolution
+│   │   ├── authorization.rb             # Membership helpers
+│   │   ├── setup_guard.rb              # First-run redirect
+│   │   └── terms_gate.rb               # Terms acceptance gate
 │   ├── application_controller.rb
 │   ├── dashboard_controller.rb
+│   ├── settings_controller.rb           # User profile settings
+│   ├── passwords_controller.rb          # Password change
+│   ├── connected_accounts_controller.rb # OAuth management
+│   ├── terms_controller.rb             # Terms acceptance
+│   ├── account_deletions_controller.rb  # Account deletion
 │   ├── teams_controller.rb
+│   ├── team_settings_controller.rb      # Team name/billing
 │   ├── memberships_controller.rb
 │   ├── invitations_controller.rb
 │   ├── billings_controller.rb
 │   ├── notifications_controller.rb
 │   ├── api_tokens_controller.rb
 │   └── api/
-│       └── base_controller.rb       # API token auth
+│       └── base_controller.rb           # API token auth + pagination
 ├── models/
 │   ├── user.rb
 │   ├── team.rb
@@ -142,35 +157,60 @@ app/
 │   ├── invitation.rb
 │   ├── plan.rb
 │   ├── api_token.rb
-│   └── announcement.rb
-├── policies/                         # Pundit policies
-├── notifications/                    # Noticed notifications
-├── components/                       # ViewComponents
+│   ├── announcement.rb
+│   └── connected_account.rb            # OAuth provider links
+├── mailers/
+│   └── invitation_mailer.rb            # Team invitation emails
+├── policies/                            # Pundit policies
+├── notifications/                       # Noticed notifications
+├── components/                          # ViewComponents
 ├── javascript/
-│   └── controllers/                  # Stimulus controllers
+│   └── controllers/                     # Stimulus controllers
 │       ├── dropdown_controller.js
 │       ├── dismissible_controller.js
 │       ├── clipboard_controller.js
 │       ├── modal_controller.js
-│       └── auto_submit_controller.js
+│       ├── auto_submit_controller.js
+│       └── tabs_controller.js           # Settings tabs
 └── views/
-    └── layouts/
-        ├── application.html.erb      # Authenticated shell
-        ├── marketing.html.erb        # Public pages
-        └── admin.html.erb            # Admin panel
+    ├── layouts/
+    │   ├── application.html.erb         # Authenticated shell
+    │   ├── marketing.html.erb           # Public pages
+    │   └── admin.html.erb               # Admin panel
+    ├── settings/                        # Tabbed settings
+    ├── memberships/                     # Team members
+    ├── invitations/                     # Invitation form
+    ├── team_settings/                   # Team settings
+    ├── terms/                           # Terms acceptance
+    └── shared/
+        └── _pagination.html.erb         # Pagy pagination
+bin/
+└── verify                              # Setup verification script
 config/
 ├── initializers/
-│   ├── base_x.rb                     # App configuration
-│   └── pay.rb                        # Billing config
+│   ├── base_x.rb                        # App configuration
+│   ├── pay.rb                           # Billing config
+│   ├── rack_attack.rb                   # Rate limiting
+│   ├── cors.rb                          # API CORS
+│   └── pagy.rb                          # Pagination config
 └── routes.rb
+test/
+├── test_helper.rb                      # Multi-tenant test helpers
+├── fixtures/                           # YAML fixtures for all models
+├── models/                             # Model unit tests
+├── controllers/                        # Integration tests
+└── system/                             # Browser-driven system tests
 lib/
 └── middleware/
-    └── tenant_middleware.rb           # Subdomain/path resolution
+    └── tenant_middleware.rb             # Subdomain/path resolution
+.github/
+└── workflows/
+    └── ci.yml                          # GitHub Actions CI
 ```
 
 ## Build Phases
 
-The skill generates the app in five phases, each building on the last:
+The skill generates the app in ten phases, each building on the last:
 
 ### Phase 1 — Project Setup & Core Models
 
@@ -213,6 +253,46 @@ The skill generates the app in five phases, each building on the last:
 - Installs Mission Control Jobs dashboard at `/admin/jobs` for Solid Queue monitoring
 - Configures development email delivery via letter_opener_web
 
+### Phase 6 — User Settings & Account Management
+
+- Builds tabbed settings page (Profile, Password, Connected Accounts, Danger Zone)
+- Adds Tabs Stimulus controller for client-side tab switching
+- Creates ConnectedAccount model for multi-provider OAuth
+- Implements TermsGate concern redirecting to `/terms` if terms not accepted
+- Adds authenticated password change with session bypass
+- Enables account deletion with password confirmation (soft delete)
+
+### Phase 7 — Team Members & Invitations
+
+- Builds MembershipsController with member list, role changes, and removal
+- Creates InvitationsController with send, cancel, and accept flows
+- Handles invitation acceptance after sign-up via session token
+- Adds InvitationMailer with HTML and text templates
+- Implements Pundit policies for invitations and memberships
+- Builds TeamSettingsController for team name and billing info
+
+### Phase 8 — Rate Limiting, CORS & Pagination
+
+- Adds `rack-attack` for rate limiting (login, password reset, invitations, API)
+- Configures `rack-cors` for API endpoints with `CORS_ORIGINS` env var
+- Sets up Pagy pagination (25 items/page) with Tailwind styling
+- Adds API pagination headers (X-Total-Count, X-Page, X-Per-Page)
+- Applies pagination to memberships, notifications, and API tokens
+
+### Phase 9 — Verification & Boot Check
+
+- Installs all gem migration tables (SolidQueue, SolidCache, Noticed, Pay)
+- Runs full migration suite and seeds
+- Generates `bin/verify` script that validates database, tables, routes, and boot
+- Catches and fixes any inconsistencies from previous phases
+
+### Phase 10 — Test Suite
+
+- Configures test helper with Devise integration and multi-tenant helpers
+- Creates YAML fixtures for all models
+- Writes model, controller/integration, and system tests
+- Generates GitHub Actions CI workflow (PostgreSQL, test suite, RuboCop)
+
 ## Post-Generation Setup
 
 After the skill finishes, you'll need to:
@@ -220,8 +300,10 @@ After the skill finishes, you'll need to:
 1. **Install dependencies** — `bundle install`
 2. **Create your `.env` file** with the required API keys (Claude Code will tell you exactly which variables are needed based on your choices)
 3. **Set up the database** — `rails db:create db:migrate db:seed`
-4. **Start the server** — `bin/dev`
-5. **Visit** `http://localhost:3000`
+4. **Verify the setup** — `bin/verify` (checks database, tables, routes, and boot)
+5. **Run tests** — `rails test` to confirm everything works
+6. **Start the server** — `bin/dev`
+7. **Visit** `http://localhost:3000`
 
 ### First-Run Setup
 
@@ -258,6 +340,7 @@ The generated app may use these variables depending on your configuration:
 | `GOOGLE_CLIENT_SECRET` | If Google auth | Google OAuth application secret |
 | `GITHUB_CLIENT_ID` | If GitHub auth | GitHub OAuth application ID |
 | `GITHUB_CLIENT_SECRET` | If GitHub auth | GitHub OAuth application secret |
+| `CORS_ORIGINS` | No | Allowed CORS origins for API (default: `*`) |
 
 ## Common Tasks After Generation
 
@@ -363,6 +446,11 @@ Contributions are welcome! If you'd like to improve the skill:
 | `phase3-features.md` | Phase 3 reference: notifications, admin panel, API |
 | `phase4-ui.md` | Phase 4 reference: UI, Stimulus controllers, layouts |
 | `phase5-dev-setup.md` | Phase 5 reference: dev email, setup wizard, soft deletes, job dashboard |
+| `phase6-settings.md` | Phase 6 reference: user settings, password, OAuth, terms, account deletion |
+| `phase7-teams.md` | Phase 7 reference: team members, invitations, role management, team settings |
+| `phase8-infrastructure.md` | Phase 8 reference: rate limiting, CORS, pagination |
+| `phase9-verification.md` | Phase 9 reference: migration verification, boot check, `bin/verify` script |
+| `phase10-tests.md` | Phase 10 reference: Minitest suite, fixtures, CI configuration |
 
 ## License
 
